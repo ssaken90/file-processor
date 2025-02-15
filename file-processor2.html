@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Обработка Java файлов</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/intellij-light.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/java.min.js"></script>
+    <style>
+        /* ... Предыдущие стили ... */
+
+        .project-tree {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .tree-item {
+            margin: 3px 0;
+            padding: 3px 0;
+        }
+
+        .tree-item.package {
+            font-weight: bold;
+        }
+
+        .tree-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tree-toggle {
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+            font-size: 12px;
+            border: 1px solid #ddd;
+        }
+
+        .tree-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .tree-checkbox {
+            margin: 0;
+        }
+
+        .tree-children {
+            margin-left: 25px;
+            border-left: 1px dashed #ccc;
+            padding-left: 15px;
+        }
+
+        .file-icon, .package-icon {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+
+        .file-icon {
+            background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23666" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>');
+        }
+
+        .package-icon {
+            background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23666" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>');
+        }
+
+        .tree-stats {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .tree-search {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .tree-search input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .tree-search button {
+            padding: 8px 15px;
+        }
+
+        .tree-filters {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .tree-filter {
+            padding: 5px 10px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .tree-filter.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
+
+        .quick-actions {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .layout-split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .layout-split {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 15px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            background-color: #e9ecef;
+        }
+
+        .badge-primary {
+            background-color: #007bff;
+            color: white;
+        }
+
+        /* Стили для подсказок */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 5px 10px;
+            background-color: #333;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Обработка Java файлов</h1>
+        
+        <div class="file-input-container">
+            <input type="file" id="fileInput" class="file-input" accept=".txt,.java">
+        </div>
+
+        <div class="layout-split">
+            <!-- Левая панель: Дерево проекта -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h3>Структура проекта</h3>
+                    <span class="badge badge-primary" id="selectedCount">0 выбрано</span>
+                </div>
+
+                <div class="tree-search">
+                    <input type="text" id="treeSearch" placeholder="Поиск файлов и пакетов...">
+                    <button id="searchClear">Очистить</button>
+                </div>
+
+                <div class="tree-filters">
+                    <span class="tree-filter active" data-filter="all">Все файлы</span>
+                    <span class="tree-filter" data-filter="java">Java файлы</span>
+                    <span class="tree-filter" data-filter="selected">Выбранные</span>
+                </div>
+
+                <div class="quick-actions">
+                    <button id="selectAll" class="tooltip" data-tooltip="Выбрать все файлы">Выбрать все</button>
+                    <button id="deselectAll" class="tooltip" data-tooltip="Снять все выделения">Снять выделение</button>
+                </div>
+
+                <div class="project-tree" id="projectTree"></div>
+
+                <div class="tree-stats">
+                    <div>Всего файлов: <span id="totalFiles">0</span></div>
+                    <div>Выбрано файлов: <span id="selectedFiles">0</span></div>
+                </div>
+            </div>
+
+            <!-- Правая панель: Предпросмотр -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h3>Предпросмотр</h3>
+                    <button id="downloadButton" disabled>Скачать результат</button>
+                </div>
+                
+                <div class="preview-container">
+                    <div class="preview" id="preview">
+                        <pre><code class="language-java"></code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let fileStructure = new Map();
+        let processedContent = '';
+        let excludedPaths = new Set();
+        let selectedPaths = new Set();
+
+        // Функция для построения дерева из путей файлов
+        function buildTreeStructure(paths) {
+            const tree = {
+                name: 'root',
+                type: 'package',
+                children: {},
+                path: ''
+            };
+
+            paths.forEach(path => {
+                const parts = path.split('/');
+                let current = tree;
+
+                parts.forEach((part, index) => {
+                    const currentPath = parts.slice(0, index + 1).join('/');
+                    if (!current.children[part]) {
+                        current.children[part] = {
+                            name: part,
+                            type: index === parts.length - 1 ? 'file' : 'package',
+                            children: {},
+                            path: currentPath
+                        };
+                    }
+                    current = current.children[part];
+                });
+            });
+
+            return tree;
+        }
+
+        // Функция для рендеринга дерева
+        function renderTree(node, parent = '') {
+            const container = document.createElement('div');
+            container.className = 'tree-item ' + node.type;
+
+            if (node.name !== 'root') {
+                const content = document.createElement('div');
+                content.className = 'tree-content';
+
+                // Иконка сворачивания/разворачивания для пакетов
+                if (node.type === 'package' && Object.keys(node.children).length > 0) {
+                    const toggle = document.createElement('span');
+                    toggle.className = 'tree-toggle';
+                    toggle.textContent = '-';
+                    toggle.onclick = () => {
+                        const children = content.nextElementSibling;
+                        children.style.display = children.style.display === 'none' ? 'block' : 'none';
+                        toggle.textContent = children.style.display === 'none' ? '+' : '-';
+                    };
+                    content.appendChild(toggle);
+                }
+
+                const label = document.createElement('label');
+                label.className = 'tree-label';
+
+                // Чекбокс
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'tree-checkbox';
+                checkbox.checked = !excludedPaths.has(node.path);
+                checkbox.onchange = () => togglePath(node.path, checkbox.checked);
+
+                // Иконка
+                const icon = document.createElement('span');
+                icon.className = node.type === 'file' ? 'file-icon' : 'package-icon';
+
+                // Название
+                const name = document.createElement('span');
+                name.textContent = node.name;
+
+                label.appendChild(checkbox);
+                label.appendChild(icon);
+                label.appendChild(name);
+                content.appendChild(label);
+
+                container.appendChild(content);
+            }
+
+            // Рендеринг дочерних элементов
+            if (Object.keys(node.children).length > 0) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'tree-children';
+                
+                Object.values(node.children)
+                    .sort((a, b) => {
+                        // Сначала пакеты, потом файлы
+                        if (a.type !== b.type) {
+                            return a.type === 'package' ? -1 : 1;
+                        }
+                        // Алфавитная сортировка
+                        return a.name.localeCompare(b.name);
+                    })
+                    .forEach(child => {
+                        childrenContainer.appendChild(renderTree(child, node.path));
+                    });
+
+                container.appendChild(childrenContainer);
+            }
+
+            return container;
+        }
+
+        // Функция для обновления статистики
+        function updateStats() {
+            const totalFiles = Array.from(fileStructure.keys()).length;
+            const selectedFiles = totalFiles - excludedPaths.size;
+            
+            document.getElementById('totalFiles').textContent = totalFiles;
+            document.getElementById('selectedFiles').textContent = selectedFiles;
+            document.getElementById('selectedCount').textContent = `${selectedFiles} выбрано`;
+        }
+
+        // Функция для переключения исключения пути
+        function togglePath(path, included) {
+            if (included) {
+                excludedPaths.delete(path);
+            } else {
+                excludedPaths.add(path);
+            }
+            
+            // Если это пакет, обрабатываем все вложенные файлы
+            if (path) {
+                Array.from(fileStructure.keys()).forEach(filePath => {
+                    if (filePath.startsWith(path + '/')) {
+                        if (included) {
+                            excludedPaths.delete(filePath);
+                        } else {
+                            excludedPaths.add(filePath);
+                        }
+                    }
+                });
+            }
+
+            updateStats();
+            updatePreview();
+        }
+
+        // Функция для обновления предпросмотра
+        function updatePreview() {
+            const selectedFiles = Array.from(fileStructure.keys())
+                .filter(path => !excludedPaths.has(path));
+
+            const parts = [];
+            for (const filePath of selectedFiles) {
+                parts.push(`/* ${filePath} */`);
+                parts.push(fileStructure.get(filePath));
+                parts.push(''); // Пустая строка между файлами
+            }
+
+            processedContent = parts.join('\n');
+            const preview = document.getElementById('preview').querySelector('code');
+            preview.textContent = processedContent;
+            hljs.highlightElement(preview);
+            document.getElementById('downloadButton').disabled = selectedFiles.length === 0;
+        }
+
+        // Функции для поиска
+        function setupSearch() {
+            const searchInput = document.getElementById('treeSearch');
+            const searchClear = document.getElementById('searchClear');
+
+            searchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                searchInTree(searchTerm);
+            });
+
+            searchClear.addEventListener('click', () => {
+                searchInput.value = '';
+                searchInTree('');
+            });
+        }
+
+        function searchInTree(searchTerm) {
+            const treeItems = document.querySelectorAll('.tree-item');
+            treeItems.forEach(item => {
+                const label = item.querySelector('.tree-label span:last-child');
+                if (label) {
+                    const text = label.textContent.toLowerCase();
+                    item.style.display = text.includes(searchTerm) ? '' : 'none';
+                    
+                    // Показываем родительские пакеты для найденных файлов
+                    if (item.style.display === '') {
+                        let parent = item.parentElement;
+                        while (parent && !parent.classList.contains('project-tree')) {
+                            parent.style.display = '';
+                            parent = parent.parentElement;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Функции для фильтров
+        function setupFilters() {
+            const filters = document.querySelectorAll('.tree-filter');
+            filters.forEach(filter => {
+                filter.addEventListener('click', () => {
+                    filters.forEach(f => f.classList.remove('active'));
+                    filter.classList.add('active');
+                    applyFilter(filter.dataset.filter);
+                });
+            });
+        }
+
+        function applyFilter(filterType) {
+            const treeItems = document.querySelectorAll('.tree-item');
+            treeItems.forEach(item => {
+                const isFile = item.classList.contains('file');
+                const isJavaFile = isFile && item.textContent.endsWith('.java');
+                const checkbox = item.querySelector('.tree-checkbox');
+                const isSelected = checkbox && checkbox.checked;
+
+                switch (filterType) {
+                    case 'all':
+                        item.style.display = '';
+                        break;
+                    case 'java':
+                        item.style.display = isJavaFile || !isFile ? '' : 'none';
+                        break;
+                    case 'selected':
+                        item.style.display = isSelected || !isFile ? '' : 'none';
+                        break;
+                }
+
+                // Показываем родительские пакеты для видимых файлов
+                if (item.style.display === '') {
+                    let parent = item.parentElement;
+                    while (parent && !parent.classList.contains('project-tree')) {
+                        parent.style.display = '';
+                        parent = parent.parentElement;
+                    }
+                }
+            });
+        }
+
+        // Быстрые действия
+        function setupQuickActions() {
+            document.getElementById('selectAll').addEventListener('click', () => {
+                excludedPaths.clear();
+                updateTreeCheckboxes();
+                updateStats();
+                updatePreview();
+            });
+
+            document.getElementById('deselectAll').addEventListener('click', () => {
+                Array.from(fileStructure.keys()).forEach(path => {
+                    excludedPaths.add(path);
+                });
+                updateTreeCheckboxes();
+                updateStats();
+                updatePreview();
+            });
+        }
+
+        function updateTreeCheckboxes() {
+            const checkboxes = document.querySelectorAll('.tree-checkbox');
+            checkboxes.forEach(checkbox => {
+                const path = checkbox.closest('.tree-item').querySelector('.tree-label span:last-child').textContent;
+                checkbox.checked = !excludedPaths.has(path);
+            });
+        }
+
+        // Обработчик загрузки файла
+        fileInput.addEventListener('change', handleFileSelect);
+        document.getElementById('downloadButton').addEventListener('click', downloadFile);
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                parseFileStructure(e.target.result);
+                displayTree();
+                updateStats();
+                updatePreview();
+            };
+            reader.readAsText(file);
+        }
+
+        function parseFileStructure(content) {
+            fileStructure.clear();
+            excludedPaths.clear();
+            
+            const lines = content.split('\n');
+            let currentFilePath = '';
+            let currentFileContent = [];
+
+            lines.forEach(line => {
+                if (line.startsWith('/* ') && line.endsWith(' */')) {
+                    if (currentFilePath && currentFileContent.length > 0) {
+                        fileStructure.set(currentFilePath, currentFileContent.join('\n'));
+                    }
+                    currentFilePath = line.slice(3, -3).trim();
+                    currentFileContent = [];
+                } else {
+                    currentFileContent.push(line);
+                }
+            });
+
+            if (currentFilePath && currentFileContent.length > 0) {
+                fileStructure.set(currentFilePath, currentFileContent.join('\n'));
+            }
+        }
+
+        function displayTree() {
+            const paths = Array.from(fileStructure.keys());
+            const tree = buildTreeStructure(paths);
+            const treeContainer = document.getElementById('projectTree');
+            treeContainer.innerHTML = '';
+            treeContainer.appendChild(renderTree(tree));
+        }
+
+        function downloadFile() {
+            if (!processedContent) return;
+
+            const blob = new Blob([processedContent], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            a.download = `processed_file_${timestamp}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Инициализация
+        setupSearch();
+        setupFilters();
+        setupQuickActions();
+    </script>
+</body>
+</html>
